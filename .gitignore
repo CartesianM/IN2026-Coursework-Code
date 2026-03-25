@@ -1,0 +1,9 @@
+.vs/
+VC/**/.vs/
+BIN/
+LIB/
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.log
