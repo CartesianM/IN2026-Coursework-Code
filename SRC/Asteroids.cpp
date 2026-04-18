@@ -20,6 +20,8 @@ Asteroids::Asteroids(int argc, char *argv[])
 {
 	mLevel = 0;
 	mAsteroidCount = 0;
+	mGameState = STATE_MENU;
+	mSelectedMenuItem = 0;
 }
 
 /** Destructor. */
@@ -58,12 +60,12 @@ void Asteroids::Start()
 	Animation *asteroid1_anim = AnimationManager::GetInstance().CreateAnimationFromFile("asteroid1", 128, 8192, 128, 128, "asteroid1_fs.png");
 	Animation *spaceship_anim = AnimationManager::GetInstance().CreateAnimationFromFile("spaceship", 128, 128, 128, 128, "spaceship_fs.png");
 
-	// Create a spaceship and add it to the world
-	mGameWorld->AddObject(CreateSpaceship());
-	// Create some asteroids and add them to the world
+	// Pre-create the spaceship (but don't add to world yet — added when game starts)
+	CreateSpaceship();
+	// Create background asteroids for the menu screen
 	CreateAsteroids(10);
 
-	//Create the GUI
+	// Create the GUI (menu + HUD, HUD hidden initially)
 	CreateGUI();
 
 	// Add a player (watcher) to the game world
@@ -87,6 +89,18 @@ void Asteroids::Stop()
 
 void Asteroids::OnKeyPressed(uchar key, int x, int y)
 {
+	if (mGameState == STATE_MENU)
+	{
+		// Enter or '1' selects the highlighted option
+		if (key == '\r' || key == '\n')
+		{
+			if (mSelectedMenuItem == 0) StartGame();
+			// Options 1-3 are empty placeholders for now
+		}
+		return;
+	}
+
+	// STATE_PLAYING controls
 	switch (key)
 	{
 	case ' ':
@@ -101,6 +115,24 @@ void Asteroids::OnKeyReleased(uchar key, int x, int y) {}
 
 void Asteroids::OnSpecialKeyPressed(int key, int x, int y)
 {
+	if (mGameState == STATE_MENU)
+	{
+		const int NUM_OPTIONS = 4;
+		switch (key)
+		{
+		case GLUT_KEY_UP:
+			mSelectedMenuItem = (mSelectedMenuItem - 1 + NUM_OPTIONS) % NUM_OPTIONS;
+			UpdateMenuHighlight();
+			break;
+		case GLUT_KEY_DOWN:
+			mSelectedMenuItem = (mSelectedMenuItem + 1) % NUM_OPTIONS;
+			UpdateMenuHighlight();
+			break;
+		default: break;
+		}
+		return;
+	}
+
 	switch (key)
 	{
 	// If up arrow key is pressed start applying forward thrust
@@ -116,6 +148,8 @@ void Asteroids::OnSpecialKeyPressed(int key, int x, int y)
 
 void Asteroids::OnSpecialKeyReleased(int key, int x, int y)
 {
+	if (mGameState == STATE_MENU) return;
+
 	switch (key)
 	{
 	// If up arrow key is released stop applying forward thrust
@@ -126,7 +160,7 @@ void Asteroids::OnSpecialKeyReleased(int key, int x, int y)
 	case GLUT_KEY_RIGHT: mSpaceship->Rotate(0); break;
 	// Default case - do nothing
 	default: break;
-	} 
+	}
 }
 
 
@@ -214,36 +248,71 @@ void Asteroids::CreateGUI()
 {
 	// Add a (transparent) border around the edge of the game display
 	mGameDisplay->GetContainer()->SetBorder(GLVector2i(10, 10));
-	// Create a new GUILabel and wrap it up in a shared_ptr
+
+	// --- HUD labels (hidden until game starts) ---
+
 	mScoreLabel = make_shared<GUILabel>("Score: 0");
-	// Set the vertical alignment of the label to GUI_VALIGN_TOP
 	mScoreLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
-	// Add the GUILabel to the GUIComponent  
-	shared_ptr<GUIComponent> score_component
-		= static_pointer_cast<GUIComponent>(mScoreLabel);
-	mGameDisplay->GetContainer()->AddComponent(score_component, GLVector2f(0.0f, 1.0f));
+	mScoreLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mScoreLabel), GLVector2f(0.0f, 1.0f));
 
-	// Create a new GUILabel and wrap it up in a shared_ptr
 	mLivesLabel = make_shared<GUILabel>("Lives: 3");
-	// Set the vertical alignment of the label to GUI_VALIGN_BOTTOM
 	mLivesLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_BOTTOM);
-	// Add the GUILabel to the GUIComponent  
-	shared_ptr<GUIComponent> lives_component = static_pointer_cast<GUIComponent>(mLivesLabel);
-	mGameDisplay->GetContainer()->AddComponent(lives_component, GLVector2f(0.0f, 0.0f));
+	mLivesLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mLivesLabel), GLVector2f(0.0f, 0.0f));
 
-	// Create a new GUILabel and wrap it up in a shared_ptr
-	mGameOverLabel = shared_ptr<GUILabel>(new GUILabel("GAME OVER"));
-	// Set the horizontal alignment of the label to GUI_HALIGN_CENTER
+	mGameOverLabel = make_shared<GUILabel>("GAME OVER");
 	mGameOverLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
-	// Set the vertical alignment of the label to GUI_VALIGN_MIDDLE
 	mGameOverLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
-	// Set the visibility of the label to false (hidden)
 	mGameOverLabel->SetVisible(false);
-	// Add the GUILabel to the GUIContainer  
-	shared_ptr<GUIComponent> game_over_component
-		= static_pointer_cast<GUIComponent>(mGameOverLabel);
-	mGameDisplay->GetContainer()->AddComponent(game_over_component, GLVector2f(0.5f, 0.5f));
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mGameOverLabel), GLVector2f(0.5f, 0.5f));
 
+	// --- Menu labels ---
+
+	mMenuTitleLabel = make_shared<GUILabel>("ASTEROIDS");
+	mMenuTitleLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuTitleLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuTitleLabel->SetColor(GLVector3f(1.0f, 0.8f, 0.0f));  // gold title
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuTitleLabel), GLVector2f(0.5f, 0.72f));
+
+	mMenuHeaderLabel = make_shared<GUILabel>("--- MENU ---");
+	mMenuHeaderLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuHeaderLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuHeaderLabel->SetColor(GLVector3f(0.8f, 0.8f, 0.8f));
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuHeaderLabel), GLVector2f(0.5f, 0.60f));
+
+	mMenuOption1Label = make_shared<GUILabel>("Start Game");
+	mMenuOption1Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuOption1Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuOption1Label->SetColor(GLVector3f(1.0f, 1.0f, 0.0f));  // selected = yellow
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuOption1Label), GLVector2f(0.5f, 0.52f));
+
+	mMenuOption2Label = make_shared<GUILabel>("Options");
+	mMenuOption2Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuOption2Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuOption2Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuOption2Label), GLVector2f(0.5f, 0.45f));
+
+	mMenuOption3Label = make_shared<GUILabel>("High Scores");
+	mMenuOption3Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuOption3Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuOption3Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuOption3Label), GLVector2f(0.5f, 0.38f));
+
+	mMenuOption4Label = make_shared<GUILabel>("Quit");
+	mMenuOption4Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mMenuOption4Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mMenuOption4Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mMenuOption4Label), GLVector2f(0.5f, 0.31f));
 }
 
 void Asteroids::OnScoreChanged(int score)
@@ -290,6 +359,39 @@ shared_ptr<GameObject> Asteroids::CreateExplosion()
 	explosion->SetSprite(explosion_sprite);
 	explosion->Reset();
 	return explosion;
+}
+
+void Asteroids::StartGame()
+{
+	mGameState = STATE_PLAYING;
+
+	// Hide all menu labels
+	mMenuTitleLabel->SetVisible(false);
+	mMenuHeaderLabel->SetVisible(false);
+	mMenuOption1Label->SetVisible(false);
+	mMenuOption2Label->SetVisible(false);
+	mMenuOption3Label->SetVisible(false);
+	mMenuOption4Label->SetVisible(false);
+
+	// Show HUD
+	mScoreLabel->SetVisible(true);
+	mLivesLabel->SetVisible(true);
+
+	// Spawn the spaceship into the world
+	mSpaceship->Reset();
+	mGameWorld->AddObject(mSpaceship);
+}
+
+void Asteroids::UpdateMenuHighlight()
+{
+	// All options default to white; selected option turns yellow
+	GLVector3f white(1.0f, 1.0f, 1.0f);
+	GLVector3f selected(1.0f, 1.0f, 0.0f);
+
+	mMenuOption1Label->SetColor(mSelectedMenuItem == 0 ? selected : white);
+	mMenuOption2Label->SetColor(mSelectedMenuItem == 1 ? selected : white);
+	mMenuOption3Label->SetColor(mSelectedMenuItem == 2 ? selected : white);
+	mMenuOption4Label->SetColor(mSelectedMenuItem == 3 ? selected : white);
 }
 
 

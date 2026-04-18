@@ -5,7 +5,7 @@
 #include "GameSession.h"
 #include "IKeyboardListener.h"
 #include "IGameWorldListener.h"
-#include "IScoreListener.h" 
+#include "IScoreListener.h"
 #include "ScoreKeeper.h"
 #include "Player.h"
 #include "IPlayerListener.h"
@@ -48,10 +48,23 @@ public:
 	void OnTimer(int value);
 
 private:
+	// Game state
+	enum GameState { STATE_MENU, STATE_PLAYING };
+	GameState mGameState;
+	int mSelectedMenuItem;
+
 	shared_ptr<Spaceship> mSpaceship;
 	shared_ptr<GUILabel> mScoreLabel;
 	shared_ptr<GUILabel> mLivesLabel;
 	shared_ptr<GUILabel> mGameOverLabel;
+
+	// Menu GUI labels
+	shared_ptr<GUILabel> mMenuTitleLabel;
+	shared_ptr<GUILabel> mMenuHeaderLabel;
+	shared_ptr<GUILabel> mMenuOption1Label;
+	shared_ptr<GUILabel> mMenuOption2Label;
+	shared_ptr<GUILabel> mMenuOption3Label;
+	shared_ptr<GUILabel> mMenuOption4Label;
 
 	uint mLevel;
 	uint mAsteroidCount;
@@ -61,7 +74,9 @@ private:
 	void CreateGUI();
 	void CreateAsteroids(const uint num_asteroids);
 	shared_ptr<GameObject> CreateExplosion();
-	
+	void StartGame();
+	void UpdateMenuHighlight();
+
 	const static uint SHOW_GAME_OVER = 0;
 	const static uint START_NEXT_LEVEL = 1;
 	const static uint CREATE_NEW_PLAYER = 2;
