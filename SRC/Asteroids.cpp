@@ -91,12 +91,20 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 {
 	if (mGameState == STATE_MENU)
 	{
-		// Enter or '1' selects the highlighted option
 		if (key == '\r' || key == '\n')
 		{
 			if (mSelectedMenuItem == 0) StartGame();
-			// Options 1-3 are empty placeholders for now
+			else if (mSelectedMenuItem == 2) ShowInstructions();
+			// Difficulty and High Scores look pretty but do nothing yet — coming soon™
 		}
+		return;
+	}
+
+	if (mGameState == STATE_INSTRUCTIONS)
+	{
+		// Any of these keys gets you out — we're not holding anyone hostage
+		if (key == '\r' || key == '\n' || key == 27 /* ESC */ || key == '\b')
+			ShowMenu();
 		return;
 	}
 
@@ -132,6 +140,8 @@ void Asteroids::OnSpecialKeyPressed(int key, int x, int y)
 		}
 		return;
 	}
+
+	if (mGameState == STATE_INSTRUCTIONS) return;  // arrow keys do nothing on the instructions screen
 
 	switch (key)
 	{
@@ -293,26 +303,99 @@ void Asteroids::CreateGUI()
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mMenuOption1Label), GLVector2f(0.5f, 0.52f));
 
-	mMenuOption2Label = make_shared<GUILabel>("Options");
+	// Difficulty option — the button is there, the dream is not (yet)
+	mMenuOption2Label = make_shared<GUILabel>("Difficulty");
 	mMenuOption2Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
 	mMenuOption2Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
 	mMenuOption2Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mMenuOption2Label), GLVector2f(0.5f, 0.45f));
 
-	mMenuOption3Label = make_shared<GUILabel>("High Scores");
+	// Instructions option — actually works, unlike its neighbours
+	mMenuOption3Label = make_shared<GUILabel>("Instructions");
 	mMenuOption3Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
 	mMenuOption3Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
 	mMenuOption3Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mMenuOption3Label), GLVector2f(0.5f, 0.38f));
 
-	mMenuOption4Label = make_shared<GUILabel>("Quit");
+	// High Scores — a monument to future ambition, currently just decoration
+	mMenuOption4Label = make_shared<GUILabel>("High Scores");
 	mMenuOption4Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
 	mMenuOption4Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
 	mMenuOption4Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mMenuOption4Label), GLVector2f(0.5f, 0.31f));
+
+	// --- Instructions screen labels — all hidden until the player is curious enough to ask ---
+
+	// Same gold as the main title — consistency is a virtue
+	mInstrTitleLabel = make_shared<GUILabel>("INSTRUCTIONS");
+	mInstrTitleLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrTitleLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrTitleLabel->SetColor(GLVector3f(1.0f, 0.8f, 0.0f));
+	mInstrTitleLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrTitleLabel), GLVector2f(0.5f, 0.85f));
+
+	// The entire point of the game, in one sentence
+	mInstrAimLabel = make_shared<GUILabel>("AIM: Survive and destroy the asteroids");
+	mInstrAimLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrAimLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrAimLabel->SetColor(GLVector3f(0.9f, 0.9f, 0.9f));
+	mInstrAimLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrAimLabel), GLVector2f(0.5f, 0.72f));
+
+	// Slightly dimmed so it reads as a header rather than a control entry
+	mInstrControlsTitleLabel = make_shared<GUILabel>("CONTROLS:");
+	mInstrControlsTitleLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrControlsTitleLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrControlsTitleLabel->SetColor(GLVector3f(0.8f, 0.8f, 0.8f));
+	mInstrControlsTitleLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrControlsTitleLabel), GLVector2f(0.5f, 0.62f));
+
+	mInstrControl1Label = make_shared<GUILabel>("UP ARROW    - Thrust forward");
+	mInstrControl1Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrControl1Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrControl1Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mInstrControl1Label->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrControl1Label), GLVector2f(0.5f, 0.54f));
+
+	mInstrControl2Label = make_shared<GUILabel>("LEFT ARROW  - Rotate left");
+	mInstrControl2Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrControl2Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrControl2Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mInstrControl2Label->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrControl2Label), GLVector2f(0.5f, 0.47f));
+
+	mInstrControl3Label = make_shared<GUILabel>("RIGHT ARROW - Rotate right");
+	mInstrControl3Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrControl3Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrControl3Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mInstrControl3Label->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrControl3Label), GLVector2f(0.5f, 0.40f));
+
+	mInstrControl4Label = make_shared<GUILabel>("SPACE       - Shoot");
+	mInstrControl4Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrControl4Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrControl4Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mInstrControl4Label->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrControl4Label), GLVector2f(0.5f, 0.33f));
+
+	// Dimmed grey — it's a whisper, not a shout. You've already read the manual.
+	mInstrBackLabel = make_shared<GUILabel>("Press ENTER or ESC to return");
+	mInstrBackLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mInstrBackLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mInstrBackLabel->SetColor(GLVector3f(0.6f, 0.6f, 0.6f));
+	mInstrBackLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInstrBackLabel), GLVector2f(0.5f, 0.18f));
 }
 
 void Asteroids::OnScoreChanged(int score)
@@ -365,21 +448,57 @@ void Asteroids::StartGame()
 {
 	mGameState = STATE_PLAYING;
 
-	// Hide all menu labels
-	mMenuTitleLabel->SetVisible(false);
-	mMenuHeaderLabel->SetVisible(false);
-	mMenuOption1Label->SetVisible(false);
-	mMenuOption2Label->SetVisible(false);
-	mMenuOption3Label->SetVisible(false);
-	mMenuOption4Label->SetVisible(false);
+	// Nuke every menu and instructions label in one go — no leftovers
+	SetMenuLabelsVisible(false);
+	SetInstructionLabelsVisible(false);
 
-	// Show HUD
+	// Time to actually play — show the HUD
 	mScoreLabel->SetVisible(true);
 	mLivesLabel->SetVisible(true);
 
-	// Spawn the spaceship into the world
+	// The ship has been waiting patiently in the wings, now it's showtime
 	mSpaceship->Reset();
 	mGameWorld->AddObject(mSpaceship);
+}
+
+void Asteroids::ShowInstructions()
+{
+	// Player asked for instructions — respect that, hide the menu and show the goods
+	mGameState = STATE_INSTRUCTIONS;
+	SetMenuLabelsVisible(false);
+	SetInstructionLabelsVisible(true);
+}
+
+void Asteroids::ShowMenu()
+{
+	// Back to safety — player has had enough reading for one day
+	mGameState = STATE_MENU;
+	SetInstructionLabelsVisible(false);
+	SetMenuLabelsVisible(true);
+}
+
+void Asteroids::SetMenuLabelsVisible(bool visible)
+{
+	// Six labels to wrangle — toggling them all one by one would be tedious
+	mMenuTitleLabel->SetVisible(visible);
+	mMenuHeaderLabel->SetVisible(visible);
+	mMenuOption1Label->SetVisible(visible);
+	mMenuOption2Label->SetVisible(visible);
+	mMenuOption3Label->SetVisible(visible);
+	mMenuOption4Label->SetVisible(visible);
+}
+
+void Asteroids::SetInstructionLabelsVisible(bool visible)
+{
+	// Eight labels, one switch — much cleaner than copy-pasting SetVisible everywhere
+	mInstrTitleLabel->SetVisible(visible);
+	mInstrAimLabel->SetVisible(visible);
+	mInstrControlsTitleLabel->SetVisible(visible);
+	mInstrControl1Label->SetVisible(visible);
+	mInstrControl2Label->SetVisible(visible);
+	mInstrControl3Label->SetVisible(visible);
+	mInstrControl4Label->SetVisible(visible);
+	mInstrBackLabel->SetVisible(visible);
 }
 
 void Asteroids::UpdateMenuHighlight()

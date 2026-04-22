@@ -48,8 +48,8 @@ public:
 	void OnTimer(int value);
 
 private:
-	// Game state
-	enum GameState { STATE_MENU, STATE_PLAYING };
+	// Game state — because we need to know if the player is still chickening out on the menu
+	enum GameState { STATE_MENU, STATE_PLAYING, STATE_INSTRUCTIONS };
 	GameState mGameState;
 	int mSelectedMenuItem;
 
@@ -66,6 +66,16 @@ private:
 	shared_ptr<GUILabel> mMenuOption3Label;
 	shared_ptr<GUILabel> mMenuOption4Label;
 
+	// Instructions screen labels — for people who actually read the manual
+	shared_ptr<GUILabel> mInstrTitleLabel;
+	shared_ptr<GUILabel> mInstrAimLabel;
+	shared_ptr<GUILabel> mInstrControlsTitleLabel;
+	shared_ptr<GUILabel> mInstrControl1Label;
+	shared_ptr<GUILabel> mInstrControl2Label;
+	shared_ptr<GUILabel> mInstrControl3Label;
+	shared_ptr<GUILabel> mInstrControl4Label;
+	shared_ptr<GUILabel> mInstrBackLabel;
+
 	uint mLevel;
 	uint mAsteroidCount;
 
@@ -76,6 +86,10 @@ private:
 	shared_ptr<GameObject> CreateExplosion();
 	void StartGame();
 	void UpdateMenuHighlight();
+	void ShowInstructions();              // swap to the instructions screen
+	void ShowMenu();                      // escape hatch back to the menu
+	void SetMenuLabelsVisible(bool visible);         // show or bury the menu all at once
+	void SetInstructionLabelsVisible(bool visible);  // same trick for the instructions screen
 
 	const static uint SHOW_GAME_OVER = 0;
 	const static uint START_NEXT_LEVEL = 1;
