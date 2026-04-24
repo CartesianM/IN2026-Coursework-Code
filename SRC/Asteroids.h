@@ -9,6 +9,7 @@
 #include "ScoreKeeper.h"
 #include "Player.h"
 #include "IPlayerListener.h"
+#include "HighScoreTable.h"
 
 class GameObject;
 class Spaceship;
@@ -48,8 +49,8 @@ public:
 	void OnTimer(int value);
 
 private:
-	// Game state — because we need to know if the player is still chickening out on the menu
-	enum GameState { STATE_MENU, STATE_PLAYING, STATE_INSTRUCTIONS };
+	// Game state — covers every screen the player might find themselves on
+	enum GameState { STATE_MENU, STATE_PLAYING, STATE_INSTRUCTIONS, STATE_HIGH_SCORES, STATE_GAME_OVER };
 	GameState mGameState;
 	int mSelectedMenuItem;
 
@@ -65,6 +66,30 @@ private:
 	shared_ptr<GUILabel> mMenuOption2Label;
 	shared_ptr<GUILabel> mMenuOption3Label;
 	shared_ptr<GUILabel> mMenuOption4Label;
+
+	// Tracks the player's score mid-game so we know if it's a high score at the end
+	int mCurrentScore;
+	// Whether the last game ended with a leaderboard-worthy score
+	bool mIsNewHighScore;
+	// What the player has typed so far for their gamer tag
+	std::string mCurrentTagInput;
+
+	// The leaderboard itself — survives for the whole session
+	HighScoreTable mHighScoreTable;
+
+	// Game over screen labels — shown after the last life is lost
+	shared_ptr<GUILabel> mNewHighScoreLabel;   // "NEW HIGH SCORE!" flash
+	shared_ptr<GUILabel> mEnterTagLabel;        // prompt to type a name
+	shared_ptr<GUILabel> mTagInputLabel;        // live display of what they're typing
+	shared_ptr<GUILabel> mTagConfirmLabel;      // "ENTER to confirm" hint
+	shared_ptr<GUILabel> mNotHighScoreLabel;    // consolation message for the rest
+	shared_ptr<GUILabel> mGameOverContinueLabel; // "ENTER to return to menu"
+
+	// High scores screen labels
+	shared_ptr<GUILabel> mHSTitleLabel;
+	shared_ptr<GUILabel> mHSColumnHeader;
+	shared_ptr<GUILabel> mHSEntryLabels[10];  // one label per leaderboard slot
+	shared_ptr<GUILabel> mHSBackLabel;
 
 	// Instructions screen labels — for people who actually read the manual
 	shared_ptr<GUILabel> mInstrTitleLabel;
@@ -88,8 +113,15 @@ private:
 	void UpdateMenuHighlight();
 	void ShowInstructions();              // swap to the instructions screen
 	void ShowMenu();                      // escape hatch back to the menu
-	void SetMenuLabelsVisible(bool visible);         // show or bury the menu all at once
-	void SetInstructionLabelsVisible(bool visible);  // same trick for the instructions screen
+	void ShowHighScores();                // pull up the leaderboard
+	void ShowGameOver();                  // end of the road — check score, show prompts
+	void SubmitScore();                   // lock in the tag and save to the table
+	void UpdateTagInputLabel();           // refresh the "> typing..." label as keys are pressed
+	void UpdateHighScoreLabels();         // rewrite the 10 entry labels from current table data
+	void SetMenuLabelsVisible(bool visible);             // show or bury the menu all at once
+	void SetInstructionLabelsVisible(bool visible);      // same trick for the instructions screen
+	void SetGameOverLabelsVisible(bool visible);          // toggle all game over prompt labels
+	void SetHighScoreScreenLabelsVisible(bool visible);   // toggle all high score screen labels
 
 	const static uint SHOW_GAME_OVER = 0;
 	const static uint START_NEXT_LEVEL = 1;

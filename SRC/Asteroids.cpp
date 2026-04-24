@@ -1,5 +1,7 @@
 #include "Asteroid.h"
 #include "Asteroids.h"
+#include "HighScoreTable.h"
+#include <iomanip>
 #include "Animation.h"
 #include "AnimationManager.h"
 #include "GameUtil.h"
@@ -22,6 +24,8 @@ Asteroids::Asteroids(int argc, char *argv[])
 	mAsteroidCount = 0;
 	mGameState = STATE_MENU;
 	mSelectedMenuItem = 0;
+	mCurrentScore = 0;
+	mIsNewHighScore = false;
 }
 
 /** Destructor. */
@@ -93,9 +97,10 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 	{
 		if (key == '\r' || key == '\n')
 		{
-			if (mSelectedMenuItem == 0) StartGame();
+			if      (mSelectedMenuItem == 0) StartGame();
 			else if (mSelectedMenuItem == 2) ShowInstructions();
-			// Difficulty and High Scores look pretty but do nothing yet — coming soon™
+			else if (mSelectedMenuItem == 3) ShowHighScores();
+			// Difficulty looks pretty but does nothing yet — coming soon™
 		}
 		return;
 	}
@@ -105,6 +110,49 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 		// Any of these keys gets you out — we're not holding anyone hostage
 		if (key == '\r' || key == '\n' || key == 27 /* ESC */ || key == '\b')
 			ShowMenu();
+		return;
+	}
+
+	if (mGameState == STATE_HIGH_SCORES)
+	{
+		// Seen enough? Get out of here.
+		if (key == '\r' || key == '\n' || key == 27 /* ESC */)
+			ShowMenu();
+		return;
+	}
+
+	if (mGameState == STATE_GAME_OVER)
+	{
+		if (mIsNewHighScore)
+		{
+			if (key == '\r' || key == '\n')
+			{
+				// They've had their moment of glory — save it and head home
+				SubmitScore();
+				ShowMenu();
+			}
+			else if (key == '\b')
+			{
+				// Classic backspace — delete the last character, no questions asked
+				if (!mCurrentTagInput.empty())
+				{
+					mCurrentTagInput.pop_back();
+					UpdateTagInputLabel();
+				}
+			}
+			else if (key >= 32 && key <= 126 && (int)mCurrentTagInput.size() < 12)
+			{
+				// Printable character and still under the 12-char limit — add it
+				mCurrentTagInput += (char)key;
+				UpdateTagInputLabel();
+			}
+		}
+		else
+		{
+			// No high score — nothing to type, just let them escape
+			if (key == '\r' || key == '\n' || key == 27 /* ESC */)
+				ShowMenu();
+		}
 		return;
 	}
 
@@ -141,7 +189,10 @@ void Asteroids::OnSpecialKeyPressed(int key, int x, int y)
 		return;
 	}
 
-	if (mGameState == STATE_INSTRUCTIONS) return;  // arrow keys do nothing on the instructions screen
+	// Arrow keys only make sense in the menu and during gameplay — block everything else
+	if (mGameState == STATE_INSTRUCTIONS ||
+		mGameState == STATE_HIGH_SCORES  ||
+		mGameState == STATE_GAME_OVER) return;
 
 	switch (key)
 	{
@@ -158,7 +209,8 @@ void Asteroids::OnSpecialKeyPressed(int key, int x, int y)
 
 void Asteroids::OnSpecialKeyReleased(int key, int x, int y)
 {
-	if (mGameState == STATE_MENU) return;
+	// Only the spaceship needs to hear about key releases — ignore everything else
+	if (mGameState != STATE_PLAYING) return;
 
 	switch (key)
 	{
@@ -211,7 +263,8 @@ void Asteroids::OnTimer(int value)
 
 	if (value == SHOW_GAME_OVER)
 	{
-		mGameOverLabel->SetVisible(true);
+		// Hand off to ShowGameOver — it decides what to show based on the score
+		ShowGameOver();
 	}
 
 }
@@ -396,16 +449,111 @@ void Asteroids::CreateGUI()
 	mInstrBackLabel->SetVisible(false);
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mInstrBackLabel), GLVector2f(0.5f, 0.18f));
+
+	// --- Game over screen labels — all hidden until the bitter end ---
+
+	// Shown only when the player actually earned a spot on the board
+	mNewHighScoreLabel = make_shared<GUILabel>("NEW HIGH SCORE!");
+	mNewHighScoreLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mNewHighScoreLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mNewHighScoreLabel->SetColor(GLVector3f(1.0f, 1.0f, 0.0f));  // bright yellow — they earned it
+	mNewHighScoreLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mNewHighScoreLabel), GLVector2f(0.5f, 0.65f));
+
+	mEnterTagLabel = make_shared<GUILabel>("Enter your gamer tag:");
+	mEnterTagLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mEnterTagLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mEnterTagLabel->SetColor(GLVector3f(0.9f, 0.9f, 0.9f));
+	mEnterTagLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mEnterTagLabel), GLVector2f(0.5f, 0.42f));
+
+	// This one updates live as the player types — starts as an empty cursor
+	mTagInputLabel = make_shared<GUILabel>("> _");
+	mTagInputLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mTagInputLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mTagInputLabel->SetColor(GLVector3f(0.4f, 1.0f, 0.4f));  // green, like a terminal
+	mTagInputLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mTagInputLabel), GLVector2f(0.5f, 0.35f));
+
+	mTagConfirmLabel = make_shared<GUILabel>("ENTER to confirm  |  BACKSPACE to delete");
+	mTagConfirmLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mTagConfirmLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mTagConfirmLabel->SetColor(GLVector3f(0.6f, 0.6f, 0.6f));
+	mTagConfirmLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mTagConfirmLabel), GLVector2f(0.5f, 0.26f));
+
+	// Shown instead of the tag prompt when the score doesn't make the cut
+	mNotHighScoreLabel = make_shared<GUILabel>("Score not high enough for the leaderboard");
+	mNotHighScoreLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mNotHighScoreLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mNotHighScoreLabel->SetColor(GLVector3f(0.8f, 0.4f, 0.4f));  // muted red — sorry mate
+	mNotHighScoreLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mNotHighScoreLabel), GLVector2f(0.5f, 0.38f));
+
+	// Shared "get out" prompt for the non-high-score path
+	mGameOverContinueLabel = make_shared<GUILabel>("Press ENTER to return to menu");
+	mGameOverContinueLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mGameOverContinueLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mGameOverContinueLabel->SetColor(GLVector3f(0.6f, 0.6f, 0.6f));
+	mGameOverContinueLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mGameOverContinueLabel), GLVector2f(0.5f, 0.28f));
+
+	// --- High scores screen labels ---
+
+	mHSTitleLabel = make_shared<GUILabel>("HIGH SCORES");
+	mHSTitleLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mHSTitleLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mHSTitleLabel->SetColor(GLVector3f(1.0f, 0.8f, 0.0f));  // same gold as the main title
+	mHSTitleLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mHSTitleLabel), GLVector2f(0.5f, 0.92f));
+
+	// Column headers so the table doesn't look like a random list of numbers
+	mHSColumnHeader = make_shared<GUILabel>("RANK  TAG              SCORE");
+	mHSColumnHeader->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mHSColumnHeader->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mHSColumnHeader->SetColor(GLVector3f(0.7f, 0.7f, 0.7f));
+	mHSColumnHeader->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mHSColumnHeader), GLVector2f(0.5f, 0.84f));
+
+	// Ten entry slots — created now, filled by UpdateHighScoreLabels() at display time
+	// Evenly spaced from y=0.77 down to y=0.14 (0.07 gap between each)
+	for (int i = 0; i < 10; i++)
+	{
+		mHSEntryLabels[i] = make_shared<GUILabel>("---");
+		mHSEntryLabels[i]->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+		mHSEntryLabels[i]->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+		mHSEntryLabels[i]->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+		mHSEntryLabels[i]->SetVisible(false);
+		mGameDisplay->GetContainer()->AddComponent(
+			static_pointer_cast<GUIComponent>(mHSEntryLabels[i]),
+			GLVector2f(0.5f, 0.77f - i * 0.07f));
+	}
+
+	mHSBackLabel = make_shared<GUILabel>("Press ENTER or ESC to return");
+	mHSBackLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mHSBackLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mHSBackLabel->SetColor(GLVector3f(0.6f, 0.6f, 0.6f));
+	mHSBackLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mHSBackLabel), GLVector2f(0.5f, 0.05f));
 }
 
 void Asteroids::OnScoreChanged(int score)
 {
-	// Format the score message using an string-based stream
+	// Keep a local copy so we can check it against the table when the game ends
+	mCurrentScore = score;
+
 	std::ostringstream msg_stream;
 	msg_stream << "Score: " << score;
-	// Get the score message as a string
-	std::string score_msg = msg_stream.str();
-	mScoreLabel->SetText(score_msg);
+	mScoreLabel->SetText(msg_stream.str());
 }
 
 void Asteroids::OnPlayerKilled(int lives_left)
@@ -448,9 +596,16 @@ void Asteroids::StartGame()
 {
 	mGameState = STATE_PLAYING;
 
-	// Nuke every menu and instructions label in one go — no leftovers
+	// Wipe the slate — score and tag carry over from nothing
+	mCurrentScore = 0;
+	mCurrentTagInput = "";
+
+	// Nuke every overlay in one go — no ghost labels haunting the gameplay
 	SetMenuLabelsVisible(false);
 	SetInstructionLabelsVisible(false);
+	SetGameOverLabelsVisible(false);
+	SetHighScoreScreenLabelsVisible(false);
+	mGameOverLabel->SetVisible(false);
 
 	// Time to actually play — show the HUD
 	mScoreLabel->SetVisible(true);
@@ -471,9 +626,17 @@ void Asteroids::ShowInstructions()
 
 void Asteroids::ShowMenu()
 {
-	// Back to safety — player has had enough reading for one day
+	// Back to safety — hide whatever screen we came from and resurrect the menu
 	mGameState = STATE_MENU;
 	SetInstructionLabelsVisible(false);
+	SetHighScoreScreenLabelsVisible(false);
+	SetGameOverLabelsVisible(false);
+	mGameOverLabel->SetVisible(false);
+
+	// HUD has no business being on the menu
+	mScoreLabel->SetVisible(false);
+	mLivesLabel->SetVisible(false);
+
 	SetMenuLabelsVisible(true);
 }
 
@@ -499,6 +662,104 @@ void Asteroids::SetInstructionLabelsVisible(bool visible)
 	mInstrControl3Label->SetVisible(visible);
 	mInstrControl4Label->SetVisible(visible);
 	mInstrBackLabel->SetVisible(visible);
+}
+
+void Asteroids::ShowHighScores()
+{
+	// Refresh label text from the actual table data before revealing the screen
+	UpdateHighScoreLabels();
+
+	mGameState = STATE_HIGH_SCORES;
+	SetMenuLabelsVisible(false);
+	SetHighScoreScreenLabelsVisible(true);
+}
+
+void Asteroids::ShowGameOver()
+{
+	mGameState = STATE_GAME_OVER;
+
+	// Hide HUD — score and lives have served their purpose
+	mScoreLabel->SetVisible(false);
+	mLivesLabel->SetVisible(false);
+
+	// GAME OVER label stays on screen regardless of high score status
+	mGameOverLabel->SetVisible(true);
+
+	mIsNewHighScore = mHighScoreTable.IsHighScore(mCurrentScore);
+	mCurrentTagInput = "";  // clear any leftover input from a previous run
+
+	if (mIsNewHighScore)
+	{
+		// Roll out the red carpet — show the tag entry prompt
+		UpdateTagInputLabel();
+		mNewHighScoreLabel->SetVisible(true);
+		mEnterTagLabel->SetVisible(true);
+		mTagInputLabel->SetVisible(true);
+		mTagConfirmLabel->SetVisible(true);
+	}
+	else
+	{
+		// Tough luck — show the consolation labels
+		mNotHighScoreLabel->SetVisible(true);
+		mGameOverContinueLabel->SetVisible(true);
+	}
+}
+
+void Asteroids::SubmitScore()
+{
+	// Hand the tag and score over to the table — it'll sort itself out
+	mHighScoreTable.AddScore(mCurrentTagInput, mCurrentScore);
+}
+
+void Asteroids::UpdateTagInputLabel()
+{
+	// Show "> " + whatever they've typed so far + a blinking-cursor underscore
+	mTagInputLabel->SetText("> " + mCurrentTagInput + "_");
+}
+
+void Asteroids::UpdateHighScoreLabels()
+{
+	const std::vector<ScoreEntry>& entries = mHighScoreTable.GetEntries();
+
+	for (int i = 0; i < 10; i++)
+	{
+		if (i < (int)entries.size())
+		{
+			// Format: "1.  PlayerName        1500"
+			// setw pads the tag to 16 chars so the score column stays aligned
+			std::ostringstream ss;
+			ss << std::left << (i + 1) << ".   "
+			   << std::setw(16) << entries[i].tag
+			   << entries[i].score;
+			mHSEntryLabels[i]->SetText(ss.str());
+		}
+		else
+		{
+			// Empty slot — nothing to brag about here yet
+			mHSEntryLabels[i]->SetText("---");
+		}
+	}
+}
+
+void Asteroids::SetGameOverLabelsVisible(bool visible)
+{
+	// All game over prompt labels in one toggle — both the HS and non-HS variants
+	mNewHighScoreLabel->SetVisible(visible);
+	mEnterTagLabel->SetVisible(visible);
+	mTagInputLabel->SetVisible(visible);
+	mTagConfirmLabel->SetVisible(visible);
+	mNotHighScoreLabel->SetVisible(visible);
+	mGameOverContinueLabel->SetVisible(visible);
+}
+
+void Asteroids::SetHighScoreScreenLabelsVisible(bool visible)
+{
+	// Title, column header, all 10 entries, and the back hint
+	mHSTitleLabel->SetVisible(visible);
+	mHSColumnHeader->SetVisible(visible);
+	for (int i = 0; i < 10; i++)
+		mHSEntryLabels[i]->SetVisible(visible);
+	mHSBackLabel->SetVisible(visible);
 }
 
 void Asteroids::UpdateMenuHighlight()
