@@ -64,6 +64,17 @@ private:
 	shared_ptr<GUILabel> mGameOverLabel;
 	shared_ptr<GUILabel> mInvulnHintLabel;  // bottom-right HUD hint for the E key
 
+	// Upgrade HUD labels (top-right) — A=Gun, S=Speed, D=Brake, F=Black Hole
+	shared_ptr<GUILabel> mUpgradeLabelGun;
+	shared_ptr<GUILabel> mUpgradeLabelSpeed;
+	shared_ptr<GUILabel> mUpgradeLabelBrake;
+	shared_ptr<GUILabel> mBlackHoleLabel;   // single-use power, shown under Brake
+
+	// Extra-life purchase prompt shown on the game-over screen
+	shared_ptr<GUILabel> mContinueLabel;
+	// True once the player has used their one allowed continue this game
+	bool mContinueUsed;
+
 	// Menu GUI labels
 	shared_ptr<GUILabel> mMenuTitleLabel;
 	shared_ptr<GUILabel> mMenuHeaderLabel;
@@ -132,6 +143,16 @@ private:
 	void CycleDifficulty();
 	// Returns the starting life count for the currently selected difficulty
 	int GetLivesForDifficulty() const;
+
+	// Cost in points for the next upgrade given the current level (10 + level * 50)
+	int  GetUpgradeCost(int currentLevel) const;
+	// Refreshes the three upgrade labels (text + colour) — called whenever score
+	// or upgrade levels change so the HUD always reflects current affordability
+	void UpdateUpgradeLabels();
+	// Show or hide the three upgrade labels in one call
+	void SetUpgradeLabelsVisible(bool visible);
+	// Spend 100 pts to gain one extra life and resume the game (one-shot per game)
+	void TryContinue();
 
 	const static uint SHOW_GAME_OVER = 0;
 	const static uint START_NEXT_LEVEL = 1;

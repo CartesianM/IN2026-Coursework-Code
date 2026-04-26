@@ -31,12 +31,33 @@ public:
 	bool CollisionTest(shared_ptr<GameObject> o);
 	void OnCollision(const GameObjectList &objects);
 
+	// --- Upgrade system ---------------------------------------------------
+	// Each component can be upgraded up to MAX_UPGRADE_LEVEL times.
+	// Gun   = lower fire-rate cooldown, Speed = stronger thrust,
+	// Brake = passive velocity damping (ship coasts to a stop faster).
+	static const int MAX_UPGRADE_LEVEL = 5;
+
+	void ResetUpgrades();
+	void UpgradeGun()   { if (mGunLevel   < MAX_UPGRADE_LEVEL) ++mGunLevel;   }
+	void UpgradeSpeed() { if (mSpeedLevel < MAX_UPGRADE_LEVEL) ++mSpeedLevel; }
+	void UpgradeBrake() { if (mBrakeLevel < MAX_UPGRADE_LEVEL) ++mBrakeLevel; }
+
+	int GetGunLevel()   const { return mGunLevel;   }
+	int GetSpeedLevel() const { return mSpeedLevel; }
+	int GetBrakeLevel() const { return mBrakeLevel; }
+
 private:
 	float mThrust;
 
 	// Invulnerability state — set via ActivateInvulnerability(), counted down each Update()
 	bool mInvulnerable;
 	int  mInvulnTimer;   // milliseconds remaining
+
+	// Upgrade state
+	int mGunLevel;
+	int mSpeedLevel;
+	int mBrakeLevel;
+	int mFireCooldown;   // ms remaining before the next shot is allowed
 
 	shared_ptr<Shape> mSpaceshipShape;
 	shared_ptr<Shape> mThrusterShape;

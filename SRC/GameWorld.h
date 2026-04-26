@@ -33,6 +33,10 @@ public:
 	GameObjectList GetCollisions( shared_ptr<GameObject> ptr );
 	GameObjectList GetCollisions( GameObject* optr );
 
+	// Read-only access to every object currently in the world — used by the
+	// black hole to find asteroids to pull in / consume each frame
+	const GameObjectList& GetGameObjects() const { return mGameObjects; }
+
 	void AddListener( IGameWorldListener* lptr) { mListeners.push_back(lptr); }
 	void RemoveListener( IGameWorldListener* lptr) { mListeners.remove(lptr); }
 

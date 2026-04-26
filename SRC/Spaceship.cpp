@@ -10,19 +10,22 @@ using namespace std;
 
 /**  Default constructor. */
 Spaceship::Spaceship()
-	: GameObject("Spaceship"), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
+	: GameObject("Spaceship"), mThrust(0), mInvulnerable(false), mInvulnTimer(0),
+	  mGunLevel(0), mSpeedLevel(0), mBrakeLevel(0), mFireCooldown(0)
 {
 }
 
 /** Construct a spaceship with given position, velocity, acceleration, angle, and rotation. */
 Spaceship::Spaceship(GLVector3f p, GLVector3f v, GLVector3f a, GLfloat h, GLfloat r)
-	: GameObject("Spaceship", p, v, a, h, r), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
+	: GameObject("Spaceship", p, v, a, h, r), mThrust(0), mInvulnerable(false), mInvulnTimer(0),
+	  mGunLevel(0), mSpeedLevel(0), mBrakeLevel(0), mFireCooldown(0)
 {
 }
 
 /** Copy constructor. */
 Spaceship::Spaceship(const Spaceship& s)
-	: GameObject(s), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
+	: GameObject(s), mThrust(0), mInvulnerable(false), mInvulnTimer(0),
+	  mGunLevel(0), mSpeedLevel(0), mBrakeLevel(0), mFireCooldown(0)
 {
 }
 
@@ -45,6 +48,24 @@ void Spaceship::Update(int t)
 			mInvulnerable = false;
 			mInvulnTimer  = 0;
 		}
+	}
+
+	// Count down the fire-rate cooldown so Shoot() can fire again when it reaches 0
+	if (mFireCooldown > 0)
+	{
+		mFireCooldown -= t;
+		if (mFireCooldown < 0) mFireCooldown = 0;
+	}
+
+	// Brake upgrade — apply velocity damping each frame. Higher brake level
+	// means more drag, so the ship coasts to a stop faster when not thrusting.
+	if (mBrakeLevel > 0)
+	{
+		float dt = t / 1000.0f;
+		float damp = 1.0f - mBrakeLevel * 0.3f * dt;
+		if (damp < 0.0f) damp = 0.0f;
+		mVelocity.x *= damp;
+		mVelocity.y *= damp;
 	}
 
 	// Call parent update function
@@ -93,7 +114,9 @@ void Spaceship::Render(void)
 /** Fire the rockets. */
 void Spaceship::Thrust(float t)
 {
-	mThrust = t;
+	// Speed upgrade scales the thrust force (Lv0 = 1.0x, Lv5 = 3.0x)
+	float speedMult = 1.0f + mSpeedLevel * 0.4f;
+	mThrust = t * speedMult;
 	// Increase acceleration in the direction of ship
 	mAcceleration.x = mThrust*cos(DEG2RAD*mAngle);
 	mAcceleration.y = mThrust*sin(DEG2RAD*mAngle);
@@ -110,6 +133,13 @@ void Spaceship::Shoot(void)
 {
 	// Check the world exists
 	if (!mWorld) return;
+	// Enforce fire-rate cooldown — shorter cooldown at higher gun levels
+	// Lv0 = 250 ms between shots, Lv5 = 50 ms (20 shots/sec)
+	if (mFireCooldown > 0) return;
+	int cooldown = 250 - mGunLevel * 40;
+	if (cooldown < 50) cooldown = 50;
+	mFireCooldown = cooldown;
+
 	// Construct a unit length vector in the direction the spaceship is headed
 	GLVector3f spaceship_heading(cos(DEG2RAD*mAngle), sin(DEG2RAD*mAngle), 0);
 	spaceship_heading.normalize();
@@ -152,4 +182,13 @@ void Spaceship::ActivateInvulnerability(int duration_ms)
 {
 	mInvulnerable = true;
 	mInvulnTimer  = duration_ms;
+}
+
+/** Resets all upgrade levels and the fire cooldown — called at the start of each new game. */
+void Spaceship::ResetUpgrades()
+{
+	mGunLevel     = 0;
+	mSpeedLevel   = 0;
+	mBrakeLevel   = 0;
+	mFireCooldown = 0;
 }

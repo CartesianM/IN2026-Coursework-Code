@@ -1,5 +1,6 @@
 #include "Asteroid.h"
 #include "Asteroids.h"
+#include "BlackHole.h"
 #include "HighScoreTable.h"
 #include <iomanip>
 #include "Animation.h"
@@ -28,6 +29,8 @@ Asteroids::Asteroids(int argc, char *argv[])
 	mIsNewHighScore = false;
 	// Default to Easy so a new player isn't punished before choosing a mode
 	mDifficulty = DIFF_EASY;
+	// One continue per game; reset to false when StartGame() runs
+	mContinueUsed = false;
 }
 
 /** Destructor. */
@@ -125,6 +128,14 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 
 	if (mGameState == STATE_GAME_OVER)
 	{
+		// L always wins — buy an extra life if eligible, regardless of high-score path.
+		// TryContinue() silently no-ops if the player can't afford it or already used it.
+		if (key == 'l' || key == 'L')
+		{
+			TryContinue();
+			return;
+		}
+
 		if (mIsNewHighScore)
 		{
 			if (key == '\r' || key == '\n')
@@ -172,6 +183,76 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 		{
 			mScoreKeeper.Deduct(10);
 			mSpaceship->ActivateInvulnerability(5000);
+		}
+		break;
+	case 'a':
+	case 'A':
+		// Buy a Gun upgrade (faster fire rate). Blocked at max level or if too poor.
+		{
+			int level = mSpaceship->GetGunLevel();
+			if (level < Spaceship::MAX_UPGRADE_LEVEL)
+			{
+				int cost = GetUpgradeCost(level);
+				if (mCurrentScore >= cost)
+				{
+					mScoreKeeper.Deduct(cost);
+					mSpaceship->UpgradeGun();
+					UpdateUpgradeLabels();
+				}
+			}
+		}
+		break;
+	case 's':
+	case 'S':
+		// Buy a Speed upgrade (stronger thrust)
+		{
+			int level = mSpaceship->GetSpeedLevel();
+			if (level < Spaceship::MAX_UPGRADE_LEVEL)
+			{
+				int cost = GetUpgradeCost(level);
+				if (mCurrentScore >= cost)
+				{
+					mScoreKeeper.Deduct(cost);
+					mSpaceship->UpgradeSpeed();
+					UpdateUpgradeLabels();
+				}
+			}
+		}
+		break;
+	case 'd':
+	case 'D':
+		// Buy a Brake upgrade (heavier velocity damping)
+		{
+			int level = mSpaceship->GetBrakeLevel();
+			if (level < Spaceship::MAX_UPGRADE_LEVEL)
+			{
+				int cost = GetUpgradeCost(level);
+				if (mCurrentScore >= cost)
+				{
+					mScoreKeeper.Deduct(cost);
+					mSpaceship->UpgradeBrake();
+					UpdateUpgradeLabels();
+				}
+			}
+		}
+		break;
+	case 'f':
+	case 'F':
+		// Spend 110 pts to drop a black hole at a random world position.
+		// It pulls in nearby asteroids and consumes any that touch its event
+		// horizon, then despawns on its own after BlackHole::LIFESPAN_MS.
+		if (mCurrentScore >= 110)
+		{
+			mScoreKeeper.Deduct(110);
+
+			// Pick a random spot in the inner 80% of the world so the hole
+			// is always somewhere visible rather than near the wrap edges
+			float x = (float)((rand() % 161) - 80);
+			float y = (float)((rand() % 161) - 80);
+
+			shared_ptr<GameObject> bh = make_shared<BlackHole>();
+			bh->SetPosition(GLVector3f(x, y, 0.0f));
+			mGameWorld->AddObject(bh);
 		}
 		break;
 	default:
@@ -254,7 +335,7 @@ void Asteroids::OnObjectRemoved(GameWorld* world, shared_ptr<GameObject> object)
 		Asteroid* asteroid = static_cast<Asteroid*>(object.get());
 		if (asteroid->WasKilledByBullet())
 		{
-			mScoreKeeper.AddScore(10);
+			mScoreKeeper.AddScore(7);
 		}
 
 		mAsteroidCount--;
@@ -335,7 +416,9 @@ void Asteroids::CreateGUI()
 
 	// --- HUD labels (hidden until game starts) ---
 
+	// Score sits in the top-left
 	mScoreLabel = make_shared<GUILabel>("Score: 0");
+	mScoreLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_LEFT);
 	mScoreLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
 	mScoreLabel->SetVisible(false);
 	mGameDisplay->GetContainer()->AddComponent(
@@ -362,6 +445,53 @@ void Asteroids::CreateGUI()
 	mInvulnHintLabel->SetVisible(false);
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mInvulnHintLabel), GLVector2f(1.0f, 0.0f));
+
+	// --- Upgrade HUD (top-right, three stacked labels) ---
+	// Each label shows the key, component name, current level, and next upgrade cost.
+	// Colour is updated in OnScoreChanged: white = affordable, grey = too expensive,
+	// green = maxed out.
+
+	mUpgradeLabelGun = make_shared<GUILabel>("A: Gun   Lv.0  (10pts)");
+	mUpgradeLabelGun->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_RIGHT);
+	mUpgradeLabelGun->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
+	mUpgradeLabelGun->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mUpgradeLabelGun->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mUpgradeLabelGun), GLVector2f(1.0f, 1.0f));
+
+	mUpgradeLabelSpeed = make_shared<GUILabel>("S: Speed Lv.0  (10pts)");
+	mUpgradeLabelSpeed->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_RIGHT);
+	mUpgradeLabelSpeed->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
+	mUpgradeLabelSpeed->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mUpgradeLabelSpeed->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mUpgradeLabelSpeed), GLVector2f(1.0f, 0.93f));
+
+	mUpgradeLabelBrake = make_shared<GUILabel>("D: Brake Lv.0  (10pts)");
+	mUpgradeLabelBrake->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_RIGHT);
+	mUpgradeLabelBrake->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
+	mUpgradeLabelBrake->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
+	mUpgradeLabelBrake->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mUpgradeLabelBrake), GLVector2f(1.0f, 0.86f));
+
+	// F: Black Hole — one-time spend power, sits directly under the Brake row
+	mBlackHoleLabel = make_shared<GUILabel>("F: Black Hole (110pts)");
+	mBlackHoleLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_RIGHT);
+	mBlackHoleLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_TOP);
+	mBlackHoleLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));  // grey until affordable
+	mBlackHoleLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mBlackHoleLabel), GLVector2f(1.0f, 0.79f));
+
+	// Continue prompt shown on the game over screen — only when affordable and unused
+	mContinueLabel = make_shared<GUILabel>("L - Continue (100 pts)");
+	mContinueLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
+	mContinueLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
+	mContinueLabel->SetColor(GLVector3f(0.0f, 0.85f, 1.0f));  // cyan — distinct from other GO labels
+	mContinueLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mContinueLabel), GLVector2f(0.5f, 0.12f));
 
 	// --- Menu labels ---
 
@@ -594,6 +724,10 @@ void Asteroids::OnScoreChanged(int score)
 		else
 			mInvulnHintLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));
 	}
+
+	// Refresh the upgrade labels so their colours reflect new affordability
+	if (mUpgradeLabelGun && mUpgradeLabelGun->GetVisible())
+		UpdateUpgradeLabels();
 }
 
 void Asteroids::OnPlayerKilled(int lives_left)
@@ -636,10 +770,12 @@ void Asteroids::StartGame()
 {
 	mGameState = STATE_PLAYING;
 
-	// Wipe the slate — score, level, and tag all reset for a clean run
+	// Wipe the slate — score, level, tag, continue flag and upgrades all reset
 	mCurrentScore = 0;
 	mCurrentTagInput = "";
 	mLevel = 0;
+	mContinueUsed = false;
+	mSpaceship->ResetUpgrades();
 
 	// Nuke every overlay in one go — no ghost labels haunting the gameplay
 	SetMenuLabelsVisible(false);
@@ -667,6 +803,10 @@ void Asteroids::StartGame()
 	mInvulnHintLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));
 	mInvulnHintLabel->SetVisible(true);
 
+	// Show the upgrade HUD and rebuild the labels for a freshly-reset ship
+	SetUpgradeLabelsVisible(true);
+	UpdateUpgradeLabels();
+
 	// The ship has been waiting patiently in the wings, now it's showtime
 	mSpaceship->Reset();
 	mGameWorld->AddObject(mSpaceship);
@@ -693,6 +833,7 @@ void Asteroids::ShowMenu()
 	mScoreLabel->SetVisible(false);
 	mLivesLabel->SetVisible(false);
 	mInvulnHintLabel->SetVisible(false);
+	SetUpgradeLabelsVisible(false);
 
 	SetMenuLabelsVisible(true);
 }
@@ -735,13 +876,17 @@ void Asteroids::ShowGameOver()
 {
 	mGameState = STATE_GAME_OVER;
 
-	// Hide HUD — score, lives, and hint have served their purpose
+	// Hide HUD — score, lives, hint and upgrade labels have served their purpose
 	mScoreLabel->SetVisible(false);
 	mLivesLabel->SetVisible(false);
 	mInvulnHintLabel->SetVisible(false);
+	SetUpgradeLabelsVisible(false);
 
 	// GAME OVER label stays on screen regardless of high score status
 	mGameOverLabel->SetVisible(true);
+
+	// Show the continue prompt only if the player can afford it and has not used it
+	mContinueLabel->SetVisible(!mContinueUsed && mCurrentScore >= 100);
 
 	mIsNewHighScore = mHighScoreTable.IsHighScore(mCurrentScore);
 	mCurrentTagInput = "";  // clear any leftover input from a previous run
@@ -808,6 +953,7 @@ void Asteroids::SetGameOverLabelsVisible(bool visible)
 	mTagConfirmLabel->SetVisible(visible);
 	mNotHighScoreLabel->SetVisible(visible);
 	mGameOverContinueLabel->SetVisible(visible);
+	mContinueLabel->SetVisible(visible);
 }
 
 void Asteroids::SetHighScoreScreenLabelsVisible(bool visible)
@@ -862,6 +1008,100 @@ void Asteroids::CycleDifficulty()
 
 	// Re-apply highlight colours so the label colour stays correct after the text change
 	UpdateMenuHighlight();
+}
+
+// Cost in points for the next upgrade given the current level.
+// 10 base, +50 per level: 10, 60, 110, 160, 210.
+int Asteroids::GetUpgradeCost(int currentLevel) const
+{
+	return 10 + currentLevel * 50;
+}
+
+// Helper used by UpdateUpgradeLabels — writes a single upgrade label's text + colour
+// based on the level. Pulled into a small static helper to avoid copy-paste of the
+// formatting/colour rules across the three components.
+static void FormatUpgradeLabel(std::shared_ptr<GUILabel>& label,
+                               int level, int cost, int currentScore,
+                               const char* key, const char* name)
+{
+	std::ostringstream ss;
+	if (level >= Spaceship::MAX_UPGRADE_LEVEL)
+	{
+		ss << key << ": " << name << "  [MAX]";
+		label->SetColor(GLVector3f(0.0f, 1.0f, 0.3f));   // green = fully upgraded
+	}
+	else
+	{
+		ss << key << ": " << name << " Lv." << level << "  (" << cost << "pts)";
+		// Bright when the player can afford the next tier, dim otherwise
+		label->SetColor(currentScore >= cost
+			? GLVector3f(1.0f, 1.0f, 1.0f)
+			: GLVector3f(0.45f, 0.45f, 0.45f));
+	}
+	label->SetText(ss.str());
+}
+
+// Rewrites the three upgrade labels — called whenever score or level changes.
+void Asteroids::UpdateUpgradeLabels()
+{
+	int gun   = mSpaceship->GetGunLevel();
+	int speed = mSpaceship->GetSpeedLevel();
+	int brake = mSpaceship->GetBrakeLevel();
+
+	FormatUpgradeLabel(mUpgradeLabelGun,   gun,   GetUpgradeCost(gun),   mCurrentScore, "A", "Gun  ");
+	FormatUpgradeLabel(mUpgradeLabelSpeed, speed, GetUpgradeCost(speed), mCurrentScore, "S", "Speed");
+	FormatUpgradeLabel(mUpgradeLabelBrake, brake, GetUpgradeCost(brake), mCurrentScore, "D", "Brake");
+
+	// Black hole isn't an upgrade (no level), just a one-shot spend. Colour it
+	// orange (matching the visual) when the player can afford it, grey otherwise.
+	mBlackHoleLabel->SetColor(mCurrentScore >= 110
+		? GLVector3f(1.0f, 0.55f, 0.0f)
+		: GLVector3f(0.45f, 0.45f, 0.45f));
+}
+
+void Asteroids::SetUpgradeLabelsVisible(bool visible)
+{
+	mUpgradeLabelGun->SetVisible(visible);
+	mUpgradeLabelSpeed->SetVisible(visible);
+	mUpgradeLabelBrake->SetVisible(visible);
+	mBlackHoleLabel->SetVisible(visible);
+}
+
+// Pay 100 points for one extra life and resume from the game over screen.
+// One-shot per game — the player can't keep buying their way back.
+void Asteroids::TryContinue()
+{
+	if (mContinueUsed || mCurrentScore < 100) return;
+
+	mContinueUsed = true;
+
+	// Spend the points first; this fires OnScoreChanged which updates score label
+	mScoreKeeper.Deduct(100);
+
+	// Grant exactly one life so the player gets one more chance, no more
+	mPlayer.Reset(1);
+	mLivesLabel->SetText("Lives: 1");
+
+	// Tear down the game-over UI
+	SetGameOverLabelsVisible(false);
+	mGameOverLabel->SetVisible(false);
+
+	// Bring the HUD back, with hint colour matching the post-deduction score
+	mScoreLabel->SetVisible(true);
+	mLivesLabel->SetVisible(true);
+	mInvulnHintLabel->SetColor(mCurrentScore >= 10
+		? GLVector3f(1.0f, 1.0f, 0.0f)
+		: GLVector3f(0.45f, 0.45f, 0.45f));
+	mInvulnHintLabel->SetVisible(true);
+	SetUpgradeLabelsVisible(true);
+	UpdateUpgradeLabels();
+
+	// Respawn the ship at the centre and resume play. Existing asteroids and
+	// purchased upgrades carry over — the player keeps everything from before.
+	mSpaceship->Reset();
+	mGameWorld->AddObject(mSpaceship);
+
+	mGameState = STATE_PLAYING;
 }
 
 
