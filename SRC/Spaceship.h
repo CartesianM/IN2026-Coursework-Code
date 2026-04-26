@@ -24,11 +24,19 @@ public:
 	void SetThrusterShape(shared_ptr<Shape> thruster_shape) { mThrusterShape = thruster_shape; }
 	void SetBulletShape(shared_ptr<Shape> bullet_shape) { mBulletShape = bullet_shape; }
 
+	// Activates invulnerability for the given duration in milliseconds
+	void ActivateInvulnerability(int duration_ms);
+	virtual bool IsInvulnerable() const override { return mInvulnerable; }
+
 	bool CollisionTest(shared_ptr<GameObject> o);
 	void OnCollision(const GameObjectList &objects);
 
 private:
 	float mThrust;
+
+	// Invulnerability state — set via ActivateInvulnerability(), counted down each Update()
+	bool mInvulnerable;
+	int  mInvulnTimer;   // milliseconds remaining
 
 	shared_ptr<Shape> mSpaceshipShape;
 	shared_ptr<Shape> mThrusterShape;

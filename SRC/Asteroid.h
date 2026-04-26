@@ -11,6 +11,12 @@ public:
 
 	bool CollisionTest(shared_ptr<GameObject> o);
 	void OnCollision(const GameObjectList& objects);
+
+	// True only when a bullet was the cause of destruction — used to gate scoring
+	bool WasKilledByBullet() const { return mKilledByBullet; }
+
+private:
+	bool mKilledByBullet;
 };
 
 #endif

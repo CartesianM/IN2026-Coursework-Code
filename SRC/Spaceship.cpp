@@ -10,19 +10,19 @@ using namespace std;
 
 /**  Default constructor. */
 Spaceship::Spaceship()
-	: GameObject("Spaceship"), mThrust(0)
+	: GameObject("Spaceship"), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
 {
 }
 
 /** Construct a spaceship with given position, velocity, acceleration, angle, and rotation. */
 Spaceship::Spaceship(GLVector3f p, GLVector3f v, GLVector3f a, GLfloat h, GLfloat r)
-	: GameObject("Spaceship", p, v, a, h, r), mThrust(0)
+	: GameObject("Spaceship", p, v, a, h, r), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
 {
 }
 
 /** Copy constructor. */
 Spaceship::Spaceship(const Spaceship& s)
-	: GameObject(s), mThrust(0)
+	: GameObject(s), mThrust(0), mInvulnerable(false), mInvulnTimer(0)
 {
 }
 
@@ -36,6 +36,17 @@ Spaceship::~Spaceship(void)
 /** Update this spaceship. */
 void Spaceship::Update(int t)
 {
+	// Count down the invulnerability timer; clear the flag once it expires
+	if (mInvulnerable)
+	{
+		mInvulnTimer -= t;
+		if (mInvulnTimer <= 0)
+		{
+			mInvulnerable = false;
+			mInvulnTimer  = 0;
+		}
+	}
+
 	// Call parent update function
 	GameObject::Update(t);
 }
@@ -43,6 +54,32 @@ void Spaceship::Update(int t)
 /** Render this spaceship. */
 void Spaceship::Render(void)
 {
+	// Draw yellow invulnerability ring before the ship sprite so it appears behind it.
+	// glPushAttrib/glPopAttrib save and restore all affected GL state (lighting, texture,
+	// line width, current colour) so we don't disturb the sprite rendering that follows.
+	if (mInvulnerable)
+	{
+		glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_CURRENT_BIT);
+		glDisable(GL_TEXTURE_2D);
+		glDisable(GL_LIGHTING);
+		glColor3f(1.0f, 1.0f, 0.0f);   // yellow
+		glLineWidth(2.5f);
+
+		// Draw a circle in local (pre-scale) space.
+		// radius 80 local units * scale 0.1 = 8 world units — visibly outside the ship sprite
+		const int   segments = 32;
+		const float radius   = 80.0f;
+		glBegin(GL_LINE_LOOP);
+		for (int i = 0; i < segments; i++)
+		{
+			float angle = 2.0f * (float)M_PI * i / segments;
+			glVertex2f(radius * cosf(angle), radius * sinf(angle));
+		}
+		glEnd();
+
+		glPopAttrib();
+	}
+
 	if (mSpaceshipShape.get() != NULL) mSpaceshipShape->Render();
 
 	// If ship is thrusting
@@ -94,6 +131,8 @@ void Spaceship::Shoot(void)
 
 bool Spaceship::CollisionTest(shared_ptr<GameObject> o)
 {
+	// While invulnerable, ignore all collisions — the ring protects the ship
+	if (mInvulnerable) return false;
 	if (o->GetType() != GameObjectType("Asteroid")) return false;
 	if (mBoundingShape.get() == NULL) return false;
 	if (o->GetBoundingShape().get() == NULL) return false;
@@ -102,5 +141,15 @@ bool Spaceship::CollisionTest(shared_ptr<GameObject> o)
 
 void Spaceship::OnCollision(const GameObjectList &objects)
 {
+	// Invulnerability should have been blocked at the CollisionTest stage, but
+	// guard here too in case of any asymmetric detection path in the engine
+	if (mInvulnerable) return;
 	mWorld->FlagForRemoval(GetThisPtr());
+}
+
+/** Activates invulnerability for the given duration in milliseconds. */
+void Spaceship::ActivateInvulnerability(int duration_ms)
+{
+	mInvulnerable = true;
+	mInvulnTimer  = duration_ms;
 }

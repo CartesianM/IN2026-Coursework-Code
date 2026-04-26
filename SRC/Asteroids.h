@@ -62,6 +62,7 @@ private:
 	shared_ptr<GUILabel> mScoreLabel;
 	shared_ptr<GUILabel> mLivesLabel;
 	shared_ptr<GUILabel> mGameOverLabel;
+	shared_ptr<GUILabel> mInvulnHintLabel;  // bottom-right HUD hint for the E key
 
 	// Menu GUI labels
 	shared_ptr<GUILabel> mMenuTitleLabel;

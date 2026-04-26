@@ -164,6 +164,16 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 	case ' ':
 		mSpaceship->Shoot();
 		break;
+	case 'e':
+	case 'E':
+		// Spend 10 points to activate 5 seconds of invulnerability.
+		// Blocked if already active (can't stack or refresh mid-effect).
+		if (mCurrentScore >= 10 && !mSpaceship->IsInvulnerable())
+		{
+			mScoreKeeper.Deduct(10);
+			mSpaceship->ActivateInvulnerability(5000);
+		}
+		break;
 	default:
 		break;
 	}
@@ -238,10 +248,19 @@ void Asteroids::OnObjectRemoved(GameWorld* world, shared_ptr<GameObject> object)
 		explosion->SetPosition(object->GetPosition());
 		explosion->SetRotation(object->GetRotation());
 		mGameWorld->AddObject(explosion);
+
+		// Only award points for laser kills — ship collisions destroy asteroids
+		// but should not reward the player since they lose a life in the same hit
+		Asteroid* asteroid = static_cast<Asteroid*>(object.get());
+		if (asteroid->WasKilledByBullet())
+		{
+			mScoreKeeper.AddScore(10);
+		}
+
 		mAsteroidCount--;
-		if (mAsteroidCount <= 0) 
-		{ 
-			SetTimer(500, START_NEXT_LEVEL); 
+		if (mAsteroidCount <= 0)
+		{
+			SetTimer(500, START_NEXT_LEVEL);
 		}
 	}
 }
@@ -334,6 +353,15 @@ void Asteroids::CreateGUI()
 	mGameOverLabel->SetVisible(false);
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mGameOverLabel), GLVector2f(0.5f, 0.5f));
+
+	// Invulnerability hint — sits bottom-right, greyed out until the player can afford it
+	mInvulnHintLabel = make_shared<GUILabel>("E - Invulnerability (10 pts)");
+	mInvulnHintLabel->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_RIGHT);
+	mInvulnHintLabel->SetVerticalAlignment(GUIComponent::GUI_VALIGN_BOTTOM);
+	mInvulnHintLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));  // grey — not yet affordable
+	mInvulnHintLabel->SetVisible(false);
+	mGameDisplay->GetContainer()->AddComponent(
+		static_pointer_cast<GUIComponent>(mInvulnHintLabel), GLVector2f(1.0f, 0.0f));
 
 	// --- Menu labels ---
 
@@ -556,6 +584,16 @@ void Asteroids::OnScoreChanged(int score)
 	std::ostringstream msg_stream;
 	msg_stream << "Score: " << score;
 	mScoreLabel->SetText(msg_stream.str());
+
+	// Colour the invulnerability hint to signal whether the player can afford it:
+	// yellow = 10+ pts available, grey = not enough points yet
+	if (mInvulnHintLabel && mInvulnHintLabel->GetVisible())
+	{
+		if (score >= 10)
+			mInvulnHintLabel->SetColor(GLVector3f(1.0f, 1.0f, 0.0f));
+		else
+			mInvulnHintLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));
+	}
 }
 
 void Asteroids::OnPlayerKilled(int lives_left)
@@ -598,9 +636,10 @@ void Asteroids::StartGame()
 {
 	mGameState = STATE_PLAYING;
 
-	// Wipe the slate — score and tag carry over from nothing
+	// Wipe the slate — score, level, and tag all reset for a clean run
 	mCurrentScore = 0;
 	mCurrentTagInput = "";
+	mLevel = 0;
 
 	// Nuke every overlay in one go — no ghost labels haunting the gameplay
 	SetMenuLabelsVisible(false);
@@ -608,6 +647,9 @@ void Asteroids::StartGame()
 	SetGameOverLabelsVisible(false);
 	SetHighScoreScreenLabelsVisible(false);
 	mGameOverLabel->SetVisible(false);
+
+	// Reset the score so a new game always starts from 0, not the previous total
+	mScoreKeeper.Reset();
 
 	// Reset the player's life pool to however many the chosen difficulty grants.
 	// Without this a second playthrough would start with 0 lives.
@@ -619,9 +661,11 @@ void Asteroids::StartGame()
 	livesStream << "Lives: " << startingLives;
 	mLivesLabel->SetText(livesStream.str());
 
-	// Time to actually play — show the HUD
+	// Show the HUD; hint starts greyed out since the player has 0 pts
 	mScoreLabel->SetVisible(true);
 	mLivesLabel->SetVisible(true);
+	mInvulnHintLabel->SetColor(GLVector3f(0.45f, 0.45f, 0.45f));
+	mInvulnHintLabel->SetVisible(true);
 
 	// The ship has been waiting patiently in the wings, now it's showtime
 	mSpaceship->Reset();
@@ -648,6 +692,7 @@ void Asteroids::ShowMenu()
 	// HUD has no business being on the menu
 	mScoreLabel->SetVisible(false);
 	mLivesLabel->SetVisible(false);
+	mInvulnHintLabel->SetVisible(false);
 
 	SetMenuLabelsVisible(true);
 }
@@ -690,9 +735,10 @@ void Asteroids::ShowGameOver()
 {
 	mGameState = STATE_GAME_OVER;
 
-	// Hide HUD — score and lives have served their purpose
+	// Hide HUD — score, lives, and hint have served their purpose
 	mScoreLabel->SetVisible(false);
 	mLivesLabel->SetVisible(false);
+	mInvulnHintLabel->SetVisible(false);
 
 	// GAME OVER label stays on screen regardless of high score status
 	mGameOverLabel->SetVisible(true);

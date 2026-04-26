@@ -27,6 +27,11 @@ public:
 	virtual bool CollisionTest(shared_ptr<GameObject> o) { return false; }
 	virtual void OnCollision(const GameObjectList& objects) {}
 
+	// Override in subclasses that support temporary invulnerability.
+	// Checked by Asteroid::CollisionTest so an invulnerable ship is never
+	// added to either object's collision list in the first place.
+	virtual bool IsInvulnerable() const { return false; }
+
 	const GameObjectType& GetType() const { return mType; }
 
 	void SetWorld(GameWorld *w) { mWorld = w; }
