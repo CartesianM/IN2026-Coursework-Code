@@ -54,6 +54,10 @@ private:
 	GameState mGameState;
 	int mSelectedMenuItem;
 
+	// Difficulty controls starting lives: Easy = 6, Medium = 4, Hard = 2
+	enum Difficulty { DIFF_EASY, DIFF_MEDIUM, DIFF_HARD };
+	Difficulty mDifficulty;
+
 	shared_ptr<Spaceship> mSpaceship;
 	shared_ptr<GUILabel> mScoreLabel;
 	shared_ptr<GUILabel> mLivesLabel;
@@ -122,6 +126,11 @@ private:
 	void SetInstructionLabelsVisible(bool visible);      // same trick for the instructions screen
 	void SetGameOverLabelsVisible(bool visible);          // toggle all game over prompt labels
 	void SetHighScoreScreenLabelsVisible(bool visible);   // toggle all high score screen labels
+
+	// Cycles the selected difficulty and refreshes the menu label
+	void CycleDifficulty();
+	// Returns the starting life count for the currently selected difficulty
+	int GetLivesForDifficulty() const;
 
 	const static uint SHOW_GAME_OVER = 0;
 	const static uint START_NEXT_LEVEL = 1;

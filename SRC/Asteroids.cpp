@@ -26,6 +26,8 @@ Asteroids::Asteroids(int argc, char *argv[])
 	mSelectedMenuItem = 0;
 	mCurrentScore = 0;
 	mIsNewHighScore = false;
+	// Default to Easy so a new player isn't punished before choosing a mode
+	mDifficulty = DIFF_EASY;
 }
 
 /** Destructor. */
@@ -98,9 +100,9 @@ void Asteroids::OnKeyPressed(uchar key, int x, int y)
 		if (key == '\r' || key == '\n')
 		{
 			if      (mSelectedMenuItem == 0) StartGame();
+			else if (mSelectedMenuItem == 1) CycleDifficulty();   // cycles Easy -> Medium -> Hard -> Easy
 			else if (mSelectedMenuItem == 2) ShowInstructions();
 			else if (mSelectedMenuItem == 3) ShowHighScores();
-			// Difficulty looks pretty but does nothing yet — coming soon™
 		}
 		return;
 	}
@@ -356,8 +358,8 @@ void Asteroids::CreateGUI()
 	mGameDisplay->GetContainer()->AddComponent(
 		static_pointer_cast<GUIComponent>(mMenuOption1Label), GLVector2f(0.5f, 0.52f));
 
-	// Difficulty option — the button is there, the dream is not (yet)
-	mMenuOption2Label = make_shared<GUILabel>("Difficulty");
+	// Difficulty option — shows current selection; press Enter to cycle through modes
+	mMenuOption2Label = make_shared<GUILabel>("Difficulty: Easy");
 	mMenuOption2Label->SetHorizontalAlignment(GUIComponent::GUI_HALIGN_CENTER);
 	mMenuOption2Label->SetVerticalAlignment(GUIComponent::GUI_VALIGN_MIDDLE);
 	mMenuOption2Label->SetColor(GLVector3f(1.0f, 1.0f, 1.0f));
@@ -607,6 +609,16 @@ void Asteroids::StartGame()
 	SetHighScoreScreenLabelsVisible(false);
 	mGameOverLabel->SetVisible(false);
 
+	// Reset the player's life pool to however many the chosen difficulty grants.
+	// Without this a second playthrough would start with 0 lives.
+	int startingLives = GetLivesForDifficulty();
+	mPlayer.Reset(startingLives);
+
+	// Sync the HUD lives label before it becomes visible
+	std::ostringstream livesStream;
+	livesStream << "Lives: " << startingLives;
+	mLivesLabel->SetText(livesStream.str());
+
 	// Time to actually play — show the HUD
 	mScoreLabel->SetVisible(true);
 	mLivesLabel->SetVisible(true);
@@ -772,6 +784,38 @@ void Asteroids::UpdateMenuHighlight()
 	mMenuOption2Label->SetColor(mSelectedMenuItem == 1 ? selected : white);
 	mMenuOption3Label->SetColor(mSelectedMenuItem == 2 ? selected : white);
 	mMenuOption4Label->SetColor(mSelectedMenuItem == 3 ? selected : white);
+}
+
+// Returns the starting life count for the currently selected difficulty.
+// Easy = 6 lives (forgiving), Medium = 4 (balanced), Hard = 2 (unforgiving).
+int Asteroids::GetLivesForDifficulty() const
+{
+	switch (mDifficulty)
+	{
+	case DIFF_EASY:   return 6;
+	case DIFF_MEDIUM: return 4;
+	case DIFF_HARD:   return 2;
+	default:          return 4;
+	}
+}
+
+// Cycles the difficulty one step forward (Easy -> Medium -> Hard -> Easy)
+// and refreshes the menu label so the player always sees their current choice.
+void Asteroids::CycleDifficulty()
+{
+	switch (mDifficulty)
+	{
+	case DIFF_EASY:   mDifficulty = DIFF_MEDIUM; break;
+	case DIFF_MEDIUM: mDifficulty = DIFF_HARD;   break;
+	case DIFF_HARD:   mDifficulty = DIFF_EASY;   break;
+	}
+
+	// Map the enum back to a display string for the menu label
+	const char* names[] = { "Easy", "Medium", "Hard" };
+	mMenuOption2Label->SetText(std::string("Difficulty: ") + names[(int)mDifficulty]);
+
+	// Re-apply highlight colours so the label colour stays correct after the text change
+	UpdateMenuHighlight();
 }
 
 

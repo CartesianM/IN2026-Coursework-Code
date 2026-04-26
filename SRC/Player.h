@@ -14,6 +14,10 @@ public:
 	Player() { mLives = 3; }
 	virtual ~Player() {}
 
+	// Resets lives to the given value — called at the start of each new game
+	// so the chosen difficulty takes effect rather than carrying over from the last round
+	void Reset(int lives) { mLives = lives; }
+
 	void OnWorldUpdated(GameWorld* world) {}
 
 	void OnObjectAdded(GameWorld* world, shared_ptr<GameObject> object) {}
